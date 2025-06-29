@@ -27,7 +27,7 @@ augment-n8n-automation/
 │   └── ... (2 more files)
 ├── config/
 │   ├── docker-compose.yml             # Configuration
-│   ├── augment_github_workflow.json   # Configuration
+│   ├── verification_results_1751226764.json # Configuration
 ├── docs/                              # Documentation
 └── README.md                          # This file
 ```
