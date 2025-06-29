@@ -1,0 +1,306 @@
+{
+  "name": "Augment Code GitHub Automation",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Load project context to prevent context loss between modes\nreturn [{\n  projectPath: '/home/owner/repos/kde-memory-guardian',\n  gitRemote: 'origin',\n  branch: 'main',\n  user: 'swipswaps',\n  repoName: 'kde-memory-guardian'\n}];"
+      },
+      "id": "2",
+      "name": "Load Context",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "command": "#!/bin/bash\nset -euo pipefail\n\n# Navigate to project directory\ncd \"{{$node[\"Load Context\"].json[\"projectPath\"]}}\"\n\n# Check if upload script exists\nif [ -f \"upload-kde-memory-guardian.sh\" ]; then\n  echo \"SCRIPT_EXISTS=true\"\nelse\n  echo \"SCRIPT_EXISTS=false\"\n  exit 1\nfi"
+      },
+      "id": "3",
+      "name": "Check Script Exists",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$node[\"Check Script Exists\"].json[\"stdout\"]}}",
+              "operation": "contains",
+              "value2": "SCRIPT_EXISTS=true"
+            }
+          ]
+        }
+      },
+      "id": "4",
+      "name": "Script Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "basicAuth",
+        "url": "=https://api.github.com/repos/{{$node[\"Load Context\"].json[\"user\"]}}/{{$node[\"Load Context\"].json[\"repoName\"]}}",
+        "options": {}
+      },
+      "id": "5",
+      "name": "Check GitHub Repo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1050, 200],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "GitHub Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$node[\"Check GitHub Repo\"].json[\"status\"]}}",
+              "operation": "equals",
+              "value2": 200
+            }
+          ]
+        }
+      },
+      "id": "6",
+      "name": "Repo Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "command": "#!/bin/bash\nset -euo pipefail\n\n# Navigate to project directory\ncd \"{{$node[\"Load Context\"].json[\"projectPath\"]}}\"\n\n# Add all changes\necho \"[INFO] Adding all changes...\"\ngit add .\n\n# Commit changes\necho \"[INFO] Committing...\"\ngit commit -m \"Automated commit via n8n workflow\"\n\n# Push to GitHub\necho \"[INFO] Pushing to GitHub...\"\ngit push -u {{$node[\"Load Context\"].json[\"gitRemote\"]}} {{$node[\"Load Context\"].json[\"branch\"]}}\n\necho \"GIT_SUCCESS=true\""
+      },
+      "id": "7",
+      "name": "Git Add Commit Push",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1450, 200]
+    },
+    {
+      "parameters": {
+        "command": "#!/bin/bash\nset -euo pipefail\n\n# Navigate to project directory\ncd \"{{$node[\"Load Context\"].json[\"projectPath\"]}}\"\n\n# Run tests\necho \"[INFO] Running tests...\"\n./run_tests.sh\n\nif [ $? -eq 0 ]; then\n  echo \"TESTS_PASSED=true\"\nelse\n  echo \"TESTS_PASSED=false\"\n  exit 1\nfi"
+      },
+      "id": "8",
+      "name": "Run Tests",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1650, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$node[\"Run Tests\"].json[\"stdout\"]}}",
+              "operation": "contains",
+              "value2": "TESTS_PASSED=true"
+            }
+          ]
+        }
+      },
+      "id": "9",
+      "name": "Tests Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1850, 200]
+    },
+    {
+      "parameters": {
+        "authentication": "basicAuth",
+        "url": "https://api.github.com/user/repos",
+        "method": "POST",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "name",
+              "value": "={{$node[\"Load Context\"].json[\"repoName\"]}}"
+            },
+            {
+              "name": "private",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "10",
+      "name": "Create GitHub Repo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1450, 400],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "GitHub Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "123456789",
+        "text": "=## Augment Code Workflow Summary\n\n**Project:** {{$node[\"Load Context\"].json[\"repoName\"]}}\n\n**Status:** {{$node[\"Tests Passed?\"].json[\"trueItems\"] ? \"✅ Success\" : \"❌ Failed\"}}\n\n**Actions Performed:**\n- Script Check: ✅\n- Git Operations: {{$node[\"Git Add Commit Push\"].json[\"stdout\"].includes(\"GIT_SUCCESS=true\") ? \"✅\" : \"❌\"}}\n- Tests: {{$node[\"Run Tests\"].json[\"stdout\"].includes(\"TESTS_PASSED=true\") ? \"✅\" : \"❌\"}}\n\n**Repo URL:** https://github.com/{{$node[\"Load Context\"].json[\"user\"]}}/{{$node[\"Load Context\"].json[\"repoName\"]}}\n\n**Timestamp:** {{Date.now()}}"
+      },
+      "id": "11",
+      "name": "Send Telegram Notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [2050, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "2",
+          "name": "Telegram Credentials"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Context": {
+      "main": [
+        [
+          {
+            "node": "Check Script Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Script Exists": {
+      "main": [
+        [
+          {
+            "node": "Script Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Script Exists?": {
+      "main": [
+        [
+          {
+            "node": "Check GitHub Repo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Telegram Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check GitHub Repo": {
+      "main": [
+        [
+          {
+            "node": "Repo Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Repo Exists?": {
+      "main": [
+        [
+          {
+            "node": "Git Add Commit Push",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create GitHub Repo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Git Add Commit Push": {
+      "main": [
+        [
+          {
+            "node": "Run Tests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create GitHub Repo": {
+      "main": [
+        [
+          {
+            "node": "Git Add Commit Push",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Tests": {
+      "main": [
+        [
+          {
+            "node": "Tests Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tests Passed?": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Telegram Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
